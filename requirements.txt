@@ -1,0 +1,11 @@
+torch
+transformers
+accelerate
+bitsandbytes
+datasets
+spacy[transformers]
+nltk
+rouge-score
+sentence-transformers
+numpy
+tqdm
