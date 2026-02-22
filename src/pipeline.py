@@ -103,6 +103,6 @@ class AnchorSumPipeline:
         
         # Add reference summary if provided
         if reference_summary:
-            result["reference"] = reference_summary
+            result["reference_summary"] = reference_summary
             
         return result
