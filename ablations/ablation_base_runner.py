@@ -1,0 +1,85 @@
+import os
+import json
+import logging
+import torch
+import random
+from datasets import load_dataset
+from src.pipeline import AnchorSumPipeline
+
+# Setup Logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Constants
+MODEL_NAME = "meta-llama/Llama-3.1-8B-Instruct"
+NLI_MODEL = "cross-encoder/nli-deberta-v3-large"
+ENTITY_MODEL = "en_core_web_trf"
+HF_TOKEN = os.getenv("HF_TOKEN")
+SEED = 42
+SAMPLE_SIZE = 1000
+MAX_REVISIONS = 1  # Support continuous correction loops
+
+def run_experiment(config_name, ablation_flags=None):
+    """
+    Runs a specific ablation experiment.
+    ablation_flags: a dict to disable components, e.g., {'nli': False, 'entity': False}
+    """
+    logger.info(f"🚀 Starting Experiment: {config_name}")
+    
+    # Load and Sample Dataset (Fixed Seed)
+    dataset = load_dataset("Awesome075/multi_news_parquet", split="test")
+    
+    # Set random seeds for reproducibility
+    random.seed(SEED)
+    torch.manual_seed(SEED)
+    
+    # Sample dataset
+    sampled_dataset = dataset.shuffle(seed=SEED).select(range(SAMPLE_SIZE))
+    
+    # Initialize pipeline with ablation flags
+    pipeline = AnchorSumPipeline(
+        model_name=MODEL_NAME,
+        nli_model=NLI_MODEL,
+        entity_model=ENTITY_MODEL,
+        hf_token=HF_TOKEN,
+        **(ablation_flags or {})
+    )
+    
+    results = []
+    for i, example in enumerate(sampled_dataset):
+        if i % 10 == 0:
+            logger.info(f"Processing example {i+1}/{SAMPLE_SIZE}")
+        
+        document = example['document']
+        reference_summary = example['summary']
+        
+        try:
+            result = pipeline.process(document, reference_summary)
+            result['config_name'] = config_name
+            result['example_id'] = i
+            results.append(result)
+        except Exception as e:
+            logger.error(f"Error processing example {i}: {str(e)}")
+            continue
+    
+    # Save results
+    output_file = f"results/{config_name}_results.json"
+    os.makedirs("results", exist_ok=True)
+    with open(output_file, 'w') as f:
+        json.dump(results, f, indent=2)
+    
+    logger.info(f"✅ Experiment {config_name} completed. Results saved to {output_file}")
+    
+    return results
+
+if __name__ == "__main__":
+    # Run different ablation experiments
+    experiments = [
+        ("full", None),
+        ("no_nli", {"nli": False}),
+        ("no_entity", {"entity": False}),
+        ("minimal", {"nli": False, "entity": False})
+    ]
+    
+    for config_name, flags in experiments:
+        run_experiment(config_name, flags)
