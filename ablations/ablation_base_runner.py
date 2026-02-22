@@ -22,7 +22,7 @@ NLI_MODEL = "cross-encoder/nli-deberta-v3-large"
 ENTITY_MODEL = "en_core_web_trf"
 HF_TOKEN = os.getenv("HF_TOKEN")
 SEED = 42
-SAMPLE_SIZE = 1000
+SAMPLE_SIZE = 500
 MAX_REVISIONS = 1  # Support continuous correction loops
 
 def run_experiment(config_name, ablation_flags=None):
@@ -78,7 +78,7 @@ def run_experiment(config_name, ablation_flags=None):
             continue
     
     # Save Final results (Consolidated 1000 sample file)
-    final_output_path = os.path.join(output_dir, f"ablation_{config_name}_final_1000.json")
+    final_output_path = os.path.join(output_dir, f"ablation_{config_name}_final_500.json")
     with open(final_output_path, 'w') as f:
         json.dump(results, f, indent=2)
     

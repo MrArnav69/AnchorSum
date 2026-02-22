@@ -43,8 +43,8 @@ class SinglePassMDS:
             torch_dtype=self.dtype,
             quantization_config=quantization_config,
             device_map="auto" if load_in_4bit else self.device,
-            token=self.token,
-            attn_implementation="flash_attention_2" # Optimized for ROCm (Scientifically Exact)
+            token=self.token
+            # Strict standard attention for raw scientific fidelity
         )
         self.model.eval()
         logger.info("Model loaded successfully.")
