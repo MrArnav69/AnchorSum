@@ -3,8 +3,14 @@ import json
 import logging
 import torch
 import random
+from dotenv import load_dotenv
 from datasets import load_dataset
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.pipeline import AnchorSumPipeline
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -24,7 +30,10 @@ def run_experiment(config_name, ablation_flags=None):
     Runs a specific ablation experiment.
     ablation_flags: a dict to disable components, e.g., {'nli': False, 'entity': False}
     """
-    logger.info(f"🚀 Starting Experiment: {config_name}")
+    # Create experiment-specific output directory
+    output_dir = f"data/ablations/{config_name}"
+    os.makedirs(output_dir, exist_ok=True)
+    logger.info(f"Checkpoints will be saved to: {output_dir}")
     
     # Load and Sample Dataset (Fixed Seed)
     dataset = load_dataset("Awesome075/multi_news_parquet", split="test")
@@ -39,9 +48,9 @@ def run_experiment(config_name, ablation_flags=None):
     # Initialize pipeline with ablation flags
     pipeline = AnchorSumPipeline(
         model_name=MODEL_NAME,
-        nli_model=NLI_MODEL,
-        entity_model=ENTITY_MODEL,
-        hf_token=HF_TOKEN,
+        nli_model_name=NLI_MODEL,
+        entity_model_name=ENTITY_MODEL,
+        token=HF_TOKEN,
         **(ablation_flags or {})
     )
     
@@ -58,28 +67,25 @@ def run_experiment(config_name, ablation_flags=None):
             result['config_name'] = config_name
             result['example_id'] = i
             results.append(result)
+            # Intermediate Save (Every 50 samples)
+            if (i + 1) % 50 == 0:
+                checkpoint_path = os.path.join(output_dir, f"checkpoint_{i+1}_samples.json")
+                with open(checkpoint_path, "w") as f:
+                    json.dump(results, f, indent=2)
+                logger.info(f"💾 Saved checkpoint to {checkpoint_path}")
         except Exception as e:
             logger.error(f"Error processing example {i}: {str(e)}")
             continue
     
-    # Save results
-    output_file = f"results/{config_name}_results.json"
-    os.makedirs("results", exist_ok=True)
-    with open(output_file, 'w') as f:
+    # Save Final results (Consolidated 1000 sample file)
+    final_output_path = os.path.join(output_dir, f"ablation_{config_name}_final_1000.json")
+    with open(final_output_path, 'w') as f:
         json.dump(results, f, indent=2)
     
-    logger.info(f"✅ Experiment {config_name} completed. Results saved to {output_file}")
+    logger.info(f"✅ Experiment {config_name} completed. Final results saved to {final_output_path}")
     
     return results
 
 if __name__ == "__main__":
     # Run different ablation experiments
-    experiments = [
-        ("full", None),
-        ("no_nli", {"nli": False}),
-        ("no_entity", {"entity": False}),
-        ("minimal", {"nli": False, "entity": False})
-    ]
-    
-    for config_name, flags in experiments:
-        run_experiment(config_name, flags)
+    pass
