@@ -9,3 +9,4 @@ rouge-score
 sentence-transformers
 numpy
 tqdm
+python-dotenv

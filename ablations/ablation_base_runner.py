@@ -3,8 +3,14 @@ import json
 import logging
 import torch
 import random
+from dotenv import load_dotenv
 from datasets import load_dataset
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.pipeline import AnchorSumPipeline
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -39,9 +45,9 @@ def run_experiment(config_name, ablation_flags=None):
     # Initialize pipeline with ablation flags
     pipeline = AnchorSumPipeline(
         model_name=MODEL_NAME,
-        nli_model=NLI_MODEL,
-        entity_model=ENTITY_MODEL,
-        hf_token=HF_TOKEN,
+        nli_model_name=NLI_MODEL,
+        entity_model_name=ENTITY_MODEL,
+        token=HF_TOKEN,
         **(ablation_flags or {})
     )
     
@@ -74,12 +80,4 @@ def run_experiment(config_name, ablation_flags=None):
 
 if __name__ == "__main__":
     # Run different ablation experiments
-    experiments = [
-        ("full", None),
-        ("no_nli", {"nli": False}),
-        ("no_entity", {"entity": False}),
-        ("minimal", {"nli": False, "entity": False})
-    ]
-    
-    for config_name, flags in experiments:
-        run_experiment(config_name, flags)
+    pass
