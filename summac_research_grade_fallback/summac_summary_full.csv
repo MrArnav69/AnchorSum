@@ -1,0 +1,2 @@
+config_name,summac_mean,summac_median,summac_std,summac_min,summac_max,method
+full,0.5613198379577151,0.559420638741775,0.09970211829646446,0.09302325581395349,0.9466357308584686,fallback

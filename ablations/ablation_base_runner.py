@@ -25,10 +25,12 @@ SEED = 42
 SAMPLE_SIZE = 500
 MAX_REVISIONS = 1  # Support continuous correction loops
 
-def run_experiment(config_name, ablation_flags=None):
+def run_experiment(config_name, ablation_flags=None, max_revisions=1, sample_size=500):
     """
     Runs a specific ablation experiment.
     ablation_flags: a dict to disable components, e.g., {'nli': False, 'entity': False}
+    max_revisions: maximum number of revisions allowed (default: 1)
+    sample_size: number of samples to process (default: 500)
     """
     # Create experiment-specific output directory
     output_dir = f"data/ablations/{config_name}"
@@ -43,21 +45,22 @@ def run_experiment(config_name, ablation_flags=None):
     torch.manual_seed(SEED)
     
     # Sample dataset
-    sampled_dataset = dataset.shuffle(seed=SEED).select(range(SAMPLE_SIZE))
+    sampled_dataset = dataset.shuffle(seed=SEED).select(range(sample_size))
     
-    # Initialize pipeline with ablation flags
+    # Initialize pipeline with ablation flags and max_revisions
     pipeline = AnchorSumPipeline(
         model_name=MODEL_NAME,
         nli_model_name=NLI_MODEL,
         entity_model_name=ENTITY_MODEL,
         token=HF_TOKEN,
+        max_revisions=max_revisions,
         **(ablation_flags or {})
     )
     
     results = []
     for i, example in enumerate(sampled_dataset):
         if i % 10 == 0:
-            logger.info(f"Processing example {i+1}/{SAMPLE_SIZE}")
+            logger.info(f"Processing example {i+1}/{sample_size}")
         
         document = example['document']
         reference_summary = example['summary']
