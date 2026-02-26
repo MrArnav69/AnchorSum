@@ -1,0 +1,2 @@
+config_name,summac_mean,summac_median,summac_std,summac_min,summac_max,method
+no_entity,0.7121289064845886,0.710673600435257,0.03411350438461513,0.6097953915596008,0.8641908168792725,SummaCConv_vitc

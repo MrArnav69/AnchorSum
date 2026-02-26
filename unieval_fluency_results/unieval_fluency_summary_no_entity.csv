@@ -1,0 +1,2 @@
+config_name,fluency_mean,fluency_median,fluency_std,fluency_min,fluency_max,method
+no_entity,0.9490785197834455,0.957273939974242,0.03470299167281394,0.5657234746596352,0.9668906312449098,UniEval-fluency
