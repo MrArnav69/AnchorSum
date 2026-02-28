@@ -81,7 +81,6 @@ def continue_full_revisions_2_experiment():
             result = pipeline.process(document, reference_summary)
             result['config_name'] = config_name
             result['example_id'] = i
-            result['max_revisions_used'] = max_revisions
             results.append(result)
             
             # Save checkpoint at 400, 450, 500
