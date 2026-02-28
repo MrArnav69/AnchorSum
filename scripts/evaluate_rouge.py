@@ -23,7 +23,7 @@ def calculate_rouge(results_path):
 
     for item in data:
         ref = item.get('reference', '')
-        hyp = item.get('anchorsum', '')
+        hyp = item.get('final_summary', item.get('anchorsum', ''))
         
         if not ref or not hyp:
             continue

@@ -1,5 +1,0 @@
-config_name,summac_mean,summac_median,summac_std,summac_min,summac_max
-base,0.5,0.5,0.0,0.5,0.5
-no_nli,0.5,0.5,0.0,0.5,0.5
-no_entity,0.5,0.5,0.0,0.5,0.5
-full,0.5,0.5,0.0,0.5,0.5
