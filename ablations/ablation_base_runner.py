@@ -12,6 +12,11 @@ from src.pipeline import AnchorSumPipeline
 # Load environment variables from .env file
 load_dotenv()
 
+# Export HF_TOKEN to environment (use environment variable instead)
+hf_token = os.getenv("HF_TOKEN")
+if hf_token:
+    os.environ["HF_TOKEN"] = hf_token
+
 # Setup Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)

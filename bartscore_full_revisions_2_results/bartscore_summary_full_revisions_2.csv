@@ -1,0 +1,2 @@
+config_name,bartscore_sum2doc_mean,bartscore_sum2doc_median,bartscore_sum2doc_std,bartscore_sum2doc_min,bartscore_sum2doc_max,bartscore_doc2sum_mean,bartscore_doc2sum_median,bartscore_doc2sum_std,bartscore_doc2sum_min,bartscore_doc2sum_max
+full_revisions_2,-6.5849091403455615,-6.558778524398804,0.36379806200524123,-8.261858940124512,-5.484647274017334,-3.6542509588371797,-3.6393473148345947,0.253085950925673,-4.57253360748291,-2.878736972808838
