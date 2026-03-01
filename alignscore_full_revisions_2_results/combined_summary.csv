@@ -1,0 +1,2 @@
+config_name,alignscore_mean,alignscore_median,alignscore_std,alignscore_min,alignscore_max,method
+full_revisions_2,0.8211377239879595,0.8278281390666962,0.09205228946810001,0.07165340334177017,0.9922698140144348,AlignScore-large
