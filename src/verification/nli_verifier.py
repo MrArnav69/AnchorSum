@@ -5,7 +5,6 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import nltk
 from nltk.tokenize import sent_tokenize
 
-# Ensure nltk punkt is downloaded
 try:
     nltk.data.find('tokenizers/punkt')
 except LookupError:
@@ -13,11 +12,8 @@ except LookupError:
 
 logger = logging.getLogger(__name__)
 
-class NLIVerifier:
+class nliverifier:
     def __init__(self, model_name: str = "cross-encoder/nli-deberta-v3-base", device: str = "auto", token: str = None):
-        """
-        Initializes the Cross-Encoder for NLI-based factual verification.
-        """
         self.token = token
         if device == "auto":
             if torch.cuda.is_available():
@@ -35,17 +31,9 @@ class NLIVerifier:
         self.model = AutoModelForSequenceClassification.from_pretrained(model_name, token=self.token).to(self.device)
         self.model.eval()
 
-        # Label mapping for nli-deberta-v3-base: 0: Contradiction, 1: Entailment, 2: Neutral
-        # We want to flag sentences that are Contradiction or Neutral (hallucinated)
         self.label_mapping = {0: "CONTRADICTION", 1: "ENTAILMENT", 2: "NEUTRAL"}
 
     def verify_draft(self, source_text: str, draft_summary: str) -> Tuple[List[str], List[str]]:
-        """
-        Verifies every sentence in the draft against the source text.
-        Returns:
-            passed_sentences: List of sentences that are entailed by the source.
-            flagged_sentences: List of sentences that are contradictions or neutral/hallucinated.
-        """
         draft_sentences = sent_tokenize(draft_summary)
         
         passed = []
@@ -61,7 +49,7 @@ class NLIVerifier:
                 padding=True, 
                 truncation=True, 
                 return_tensors="pt",
-                max_length=512 # Limiting source context for speed, ideally we'd chunk source or use longformer NLI
+                max_length=512
             ).to(self.device)
             
             with torch.no_grad():

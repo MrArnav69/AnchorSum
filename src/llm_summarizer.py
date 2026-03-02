@@ -6,7 +6,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class SinglePassMDS:
+class singlepassmds:
     def __init__(
         self, 
         model_name: str = "",
@@ -17,12 +17,11 @@ class SinglePassMDS:
         self.model_name = model_name
         self.token = token
         
-        # Enforce Full FP32 Precision as per user request for maximum scientific fidelity
         self.device = device if device != "auto" else ("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = torch.float32
-        logger.info(f"Full Precision (FP32) enforced for {model_name} on {self.device}")
+        logger.info(f"full precision (fp32) enforced for {model_name} on {self.device}")
 
-        logger.info(f"Initializing SinglePassMDS with model: {model_name} on {self.device}")
+        logger.info(f"initializing singlepassmds with model: {model_name} on {self.device}")
         
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, token=self.token)
         if self.tokenizer.pad_token is None:
@@ -44,15 +43,11 @@ class SinglePassMDS:
             quantization_config=quantization_config,
             device_map="auto" if load_in_4bit else self.device,
             token=self.token
-            # Strict standard attention for raw scientific fidelity
         )
         self.model.eval()
         logger.info("Model loaded successfully.")
 
     def _format_initial_prompt(self, documents: str, anchors: Optional[List[str]] = None) -> str:
-        """
-        Formats the prompt for the initial Draft 1 generation.
-        """
         system_msg = (
             "You are an expert investigative journalist. Your task is to write a highly detailed, "
             "comprehensive, narrative summary synthesizing the provided source documents. "
@@ -80,9 +75,6 @@ class SinglePassMDS:
             return f"System: {system_msg}\n\nUser: {user_msg}\n\nAssistant:"
 
     def _format_revision_prompt(self, documents: str, draft: str, flags: List[str]) -> str:
-        """
-        Formats the prompt for the Revise phase, providing the LLM with the previous draft and specific errors.
-        """
         system_msg = (
             "You are an expert editor. You have written a draft summary based on source documents, "
             "but an audit has flagged factual errors and omissions. You must revise the draft to fix these issues."
@@ -114,7 +106,7 @@ class SinglePassMDS:
             output_ids = self.model.generate(
                 **inputs,
                 max_new_tokens=max_new_tokens,
-                do_sample=False, # We want deterministic, highly factual synthesis
+                do_sample=False,
                 repetition_penalty=1.1,
                 pad_token_id=self.tokenizer.eos_token_id
             )
@@ -125,15 +117,9 @@ class SinglePassMDS:
         return summary.strip()
 
     def generate_draft(self, documents: str, anchors: Optional[List[str]] = None, max_new_tokens: int = 1024) -> str:
-        """
-        Generates the first Draft summary.
-        """
         prompt = self._format_initial_prompt(documents, anchors)
         return self._generate(prompt, max_new_tokens=max_new_tokens)
 
     def revise_draft(self, documents: str, draft: str, flags: List[str], max_new_tokens: int = 1024) -> str:
-        """
-        Revises the draft based on audit flags.
-        """
         prompt = self._format_revision_prompt(documents, draft, flags)
         return self._generate(prompt, max_new_tokens=max_new_tokens)
