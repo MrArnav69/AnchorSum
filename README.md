@@ -431,20 +431,6 @@ Handles dataset loading from `data/multi_news_500_samples.json`, per-sample chec
 
 ---
 
-## Citation
-
-If you use AnchorSum in your research, please cite:
-
-```bibtex
-@article{gupta2025anchorsum,
-  title  = {{AnchorSum}: Improving Multi-Document Summarization Faithfulness
-             through {NLI} and Entity-Gated Iterative Refinement},
-  author = {Gupta, Arnav},
-  year   = {2025}
-}
-```
-
----
 
 ## Acknowledgements
 
