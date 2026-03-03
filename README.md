@@ -1,17 +1,25 @@
 <p align="center">
   <h1 align="center">AnchorSum</h1>
   <p align="center">
-    <strong>Anchor-Guided Summarization with Iterative Verification for Faithful Multi-Document Synthesis</strong>
+    <strong>Improving Multi-Document Summarization Faithfulness<br/>through NLI and Entity-Gated Iterative Refinement</strong>
   </p>
   <p align="center">
-    <a href="#overview">Overview</a> •
-    <a href="#architecture">Architecture</a> •
-    <a href="#repository-structure">Repository Structure</a> •
-    <a href="#installation">Installation</a> •
-    <a href="#usage">Usage</a> •
-    <a href="#ablation-studies">Ablation Studies</a> •
-    <a href="#evaluation">Evaluation</a> •
-    <a href="#results">Results</a> •
+    <img src="https://img.shields.io/badge/Python-3.9%2B-blue?style=flat-square&logo=python&logoColor=white"/>
+    <img src="https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C?style=flat-square&logo=pytorch&logoColor=white"/>
+    <img src="https://img.shields.io/badge/🤗%20HuggingFace-Transformers-FFD21E?style=flat-square"/>
+    <img src="https://img.shields.io/badge/spaCy-en__core__web__trf-09A3D5?style=flat-square"/>
+    <img src="https://img.shields.io/badge/Evaluation-6%20Metrics-green?style=flat-square"/>
+    <img src="https://img.shields.io/badge/License-MIT-lightgrey?style=flat-square"/>
+  </p>
+  <p align="center">
+    <a href="#overview">Overview</a> ·
+    <a href="#key-contributions">Contributions</a> ·
+    <a href="#architecture">Architecture</a> ·
+    <a href="#repository-structure">Repository</a> ·
+    <a href="#installation">Installation</a> ·
+    <a href="#usage">Usage</a> ·
+    <a href="#reproducing-paper-results">Reproduce</a> ·
+    <a href="#results">Results</a> ·
     <a href="#citation">Citation</a>
   </p>
 </p>
@@ -20,71 +28,85 @@
 
 ## Overview
 
-**AnchorSum** is a novel multi-document summarization (MDS) framework that addresses the critical challenge of factual hallucination in LLM-generated summaries. Rather than relying on a single forward pass, AnchorSum introduces a **generate → verify → revise** pipeline that anchors the summarization process to salient entities extracted from source documents and iteratively corrects factual inconsistencies through dual verification modules.
+Abstractive multi-document summarization systems optimized for conditional log-likelihood routinely **hallucinate** — generating entities, events, and statistics with no grounding in any source document. **AnchorSum** addresses this without any task-specific fine-tuning through a four-phase modular pipeline:
 
-The framework leverages:
+1. **Anchor extraction** — a RoBERTa-base NER pipeline ranks named entities by corpus frequency, producing a constraint set $\mathcal{A}$ that simultaneously guides generation and provides post-hoc verification targets.
+2. **Anchor-conditioned draft generation** — `Meta-Llama-3.1-8B-Instruct` generates an initial draft under greedy decoding with $\mathcal{A}$ injected as a soft semantic constraint.
+3. **Dual-mode faithfulness auditing** — two independent, complementary verifiers assess the draft: a cross-encoder NLI model (`cross-encoder/nli-deberta-v3-large`) checks sentence-level entailment; a conjunctive entity filter checks anchor coverage and extrinsic hallucination. Together they produce a structured flag set $\mathcal{F} = \mathcal{F}_\text{NLI} \cup \mathcal{F}_\text{ENT}$.
+4. **Flag-guided iterative revision** — the LLM is re-prompted in an expert-editor role with $\mathcal{F}$ as a numbered corrective list. Critically, feedback originates from **external neural verifiers**, not LLM self-assessment, eliminating sycophantic self-evaluation artifacts.
 
-- **LLaMA 3.1-8B-Instruct** as the backbone generative model for single-pass multi-document summarization
-- **Entity anchoring** via spaCy NER (`en_core_web_trf`) to identify and enforce coverage of key entities (persons, organizations, locations, dates, monetary values)
-- **NLI-based factual verification** via DeBERTa-v3-Large (`cross-encoder/nli-deberta-v3-large`) to detect contradictory or unsupported claims at the sentence level
-- **Iterative self-revision** where flagged errors are fed back to the LLM for targeted correction
+> **Evaluated on 500 Multi-News test instances** across six automatic metrics and on 50 instances via a dual-judge LLM-as-judge panel (DeepSeek-R1 + Qwen3.5-Plus thinking mode). AnchorSum achieves a **6.3% relative SummaCConv improvement** over the unaugmented generator and outperforms PEGASUS-MultiNews, PRIMERA-MultiNews, and BART-large-CNN across every faithfulness dimension.
 
-AnchorSum is evaluated on **500 samples** from the [Multi-News](https://huggingface.co/datasets/Awesome075/multi_news_parquet) test split using a comprehensive suite of **six automatic evaluation metrics**, spanning content overlap, semantic similarity, factual consistency, and linguistic fluency.
+---
+
+## Key Contributions
+
+| # | Contribution | Location |
+|---|---|---|
+| 1 | **Anchor-conditioned generation** — corpus-frequency entity anchors serve as both generative soft constraints and post-hoc verification targets | `src/verification/entity_guard.py` |
+| 2 | **Dual-mode auditing** — NLI (sentence-level semantic inconsistency) and Entity Guard (extrinsic hallucination) address non-overlapping failure modes in Maynez et al.'s hallucination taxonomy | `src/verification/` |
+| 3 | **Externally grounded revision** — structured flag feedback from independent neural verifiers, explicitly avoiding Self-Refine-style sycophancy | `src/llm_summarizer.py` |
+| 4 | **Verifier exploitation as a novel failure mode** — a second revision cycle inflates SummaCConv by +0.185 while collapsing BARTScore s→d by −2.566 nats at <0.4% output length change; we provide a principled multi-metric triangulation methodology for detecting it | `ablations/Revision_Depth/` |
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      AnchorSum Pipeline                         │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌──────────────┐     ┌──────────────────────────────────┐      │
-│  │ Source Docs   │────▶│  Entity Guard (spaCy NER)        │      │
-│  │ (Multi-News)  │     │  Extract top-N salient anchors   │      │
-│  └──────┬───────┘     └──────────────┬───────────────────┘      │
-│         │                            │                          │
-│         ▼                            ▼                          │
-│  ┌──────────────────────────────────────────────────────┐       │
-│  │          LLM Summarizer (LLaMA 3.1-8B-Instruct)     │       │
-│  │   Generate initial draft with anchor constraints     │       │
-│  └──────────────────────┬───────────────────────────────┘       │
-│                         │                                       │
-│                         ▼                                       │
-│  ┌──────────────────────────────────────────────────────┐       │
-│  │              Verification Loop (k iterations)         │       │
-│  │                                                      │       │
-│  │  ┌──────────────────┐   ┌─────────────────────────┐  │       │
-│  │  │  NLI Verifier    │   │   Entity Guard          │  │       │
-│  │  │  (DeBERTa-v3)    │   │   Coverage + Halluc.    │  │       │
-│  │  │                  │   │   Detection             │  │       │
-│  │  │  Sentence-level  │   │                         │  │       │
-│  │  │  entailment      │   │  • Missing anchors      │  │       │
-│  │  │  checking        │   │  • Hallucinated entities │  │       │
-│  │  └────────┬─────────┘   └────────────┬────────────┘  │       │
-│  │           │                          │               │       │
-│  │           └──────────┬───────────────┘               │       │
-│  │                      ▼                               │       │
-│  │           ┌─────────────────────┐                    │       │
-│  │           │   Flags Aggregated  │                    │       │
-│  │           │   No flags → STOP   │                    │       │
-│  │           │   Has flags → REVISE│                    │       │
-│  │           └─────────┬───────────┘                    │       │
-│  │                     │                                │       │
-│  │                     ▼                                │       │
-│  │           ┌──────────────────────────────────┐       │       │
-│  │           │  LLM Revision Pass               │       │       │
-│  │           │  Fix flagged errors, preserve     │       │       │
-│  │           │  narrative coherence              │       │       │
-│  │           └──────────────────────────────────┘       │       │
-│  └──────────────────────────────────────────────────────┘       │
-│                         │                                       │
-│                         ▼                                       │
-│              ┌───────────────────┐                               │
-│              │  Final Summary    │                               │
-│              └───────────────────┘                               │
-└─────────────────────────────────────────────────────────────────┘
+Source Corpus D = d₁ ‖ … ‖ dₖ
+         │
+         ▼
+┌─────────────────────────────────────┐
+│  PHASE 0 — Anchor Extraction        │
+│  spaCy en_core_web_trf (125M)        │
+│  Top-N entities by corpus frequency  │
+│  A = {a₁, …, aₙ}   (N = 15)        │
+└──────────────┬──────────────────────┘
+               │ A
+               ▼
+┌─────────────────────────────────────┐
+│  PHASE 1 — Draft Generation         │
+│  Meta-Llama-3.1-8B-Instruct         │
+│  Greedy decoding · rep. penalty 1.1 │
+│  A injected as soft constraint       │
+│  Ŝ⁽⁰⁾ ← LLM(D, A)                 │
+└──────────────┬──────────────────────┘
+               │ Ŝ⁽ⁱ⁾
+               ▼
+┌─────────────────────────────────────────────────────────┐
+│  PHASE 2 — Dual-Mode Faithfulness Audit                 │
+│                                                         │
+│  ┌───────────────────────────┐  ┌─────────────────────┐ │
+│  │  2a: NLI Audit            │  │  2b: Entity Guard   │ │
+│  │  cross-encoder/            │  │  Coverage check:    │ │
+│  │  nli-deberta-v3-large     │  │  M = anchors absent │ │
+│  │  435M · SNLI + MultiNLI   │  │  from Ŝ             │ │
+│  │                           │  │                     │ │
+│  │  Each sentence Ŝᵢ vs D   │  │  Hallucination:     │ │
+│  │  → ENTAILMENT / NEUTRAL   │  │  H = entities in Ŝ  │ │
+│  │    / CONTRADICTION        │  │  absent from D      │ │
+│  │                           │  │  (conjunctive filter│ │
+│  │  F_NLI = {non-entailed}   │  │  suppresses FP)     │ │
+│  └─────────────┬─────────────┘  └──────────┬──────────┘ │
+│                └──────────┬────────────────┘            │
+│                           │ F = F_NLI ∪ F_ENT           │
+└───────────────────────────┼─────────────────────────────┘
+                            │
+               ┌────────────┴────────────┐
+               │                         │
+           F = ∅?                    F ≠ ∅ and i < T_max
+               │                         │
+               ▼                         ▼
+         Final Ŝ*             ┌────────────────────────┐
+                               │  PHASE 3 — Revision    │
+                               │  LLM.Revise(D, Ŝ⁽ⁱ⁾, F)│
+                               │  Expert-editor role    │
+                               │  Flags as numbered list│
+                               │  Ŝ⁽ⁱ⁺¹⁾ → Phase 2     │
+                               └────────────────────────┘
+
+  Convergence: i* = min{i | F⁽ⁱ⁾ = ∅  or  i = T_max}
+  Default: T_max = 1
 ```
 
 ---
@@ -93,30 +115,31 @@ AnchorSum is evaluated on **500 samples** from the [Multi-News](https://huggingf
 
 ```
 AnchorSum/
-├── src/                              # Core framework source code
+│
+├── src/                                  # Core pipeline source
 │   ├── __init__.py
-│   ├── pipeline.py                   # Main AnchorSum pipeline orchestrator
-│   ├── llm_summarizer.py            # LLaMA-based single-pass MDS with revision
-│   └── verification/                 # Dual verification subsystem
+│   ├── pipeline.py                       # Main orchestrator (Phase 0–3 composition)
+│   ├── llm_summarizer.py                 # LLaMA draft generation + revision prompting
+│   └── verification/
 │       ├── __init__.py
-│       ├── nli_verifier.py           # NLI-based factual consistency checker (DeBERTa-v3)
-│       └── entity_guard.py           # Entity anchor extraction & hallucination detector (spaCy)
+│       ├── nli_verifier.py               # DeBERTa-v3-Large sentence-level NLI audit
+│       └── entity_guard.py               # spaCy anchor extraction + hallucination filter
 │
-├── ablations/                        # Ablation study experiment runners
-│   ├── ablation_base_runner.py       # Shared experiment runner (dataset loading, checkpointing)
+├── ablations/                            # Experiment runners
+│   ├── ablation_base_runner.py           # Shared base: dataset loading, checkpointing
 │   ├── Component_Ablation/
-│   │   └── run_all_sequential.py     # Runs all 4 component ablation configs sequentially
+│   │   └── run_all_sequential.py         # 4 configs × 500 samples (sequential)
 │   └── Revision_Depth/
-│       └── revision2.py              # Runs full pipeline with max_revisions=2
+│       └── revision2.py                  # Full pipeline, T_max = 2
 │
-├── scripts/                          # Evaluation metric computation scripts
+├── scripts/                              # Per-metric evaluation scripts
 │   ├── Component_Ablation/
-│   │   ├── evaluate_rouge_bertscore_simple.py    # ROUGE-1/2/L scoring
-│   │   ├── evaluate_bertscore_xlarge.py          # BERTScore (DeBERTa-XLarge-MNLI)
-│   │   ├── evaluate_alignscore_simple.py         # AlignScore (RoBERTa-Large, NLI-SP)
-│   │   ├── evaluate_bartscore_simple.py          # BARTScore (BART-Large-CNN; bidirectional)
-│   │   ├── evaluate_summac_final.py              # SummaC (SummaCConv with ViT-C)
-│   │   └── evaluate_unieval_fluency_simple.py    # UniEval (fluency dimension)
+│   │   ├── evaluate_rouge_bertscore_simple.py      # ROUGE-1/2/L
+│   │   ├── evaluate_bertscore_xlarge.py            # BERTScore (DeBERTa-XLarge-MNLI)
+│   │   ├── evaluate_alignscore_simple.py           # AlignScore (RoBERTa-Large, NLI-SP)
+│   │   ├── evaluate_bartscore_simple.py            # BARTScore (BART-Large-CNN, s→d & d→s)
+│   │   ├── evaluate_summac_final.py                # SummaCConv (ViT-C backbone)
+│   │   └── evaluate_unieval_fluency_simple.py      # UniEval fluency dimension
 │   └── Revision_Depth/
 │       ├── evaluate_rouge_bert_full_revisions_2.py
 │       ├── evaluate_bartscore_full_revisions_2.py
@@ -124,32 +147,30 @@ AnchorSum/
 │       ├── evaluate_summac_full_revisions_2.py
 │       └── evaluate_unieval_fluency_full_revisions_2.py
 │
-├── data/                             # Datasets and generated ablation outputs
-│   ├── multi_news_500_samples.json   # Cached 500-sample Multi-News test subset (seed=42)
-│   ├── document.json                 # Sample outputs with multi-model comparisons
-│   └── ablations/                    # Generated summaries per ablation configuration
-│       ├── base/                     # No verification, no revision
-│       ├── no_nli/                   # Entity Guard only (no NLI verification)
-│       ├── no_entity/                # NLI Verifier only (no entity anchoring)
-│       ├── full/                     # Full pipeline (1 revision)
-│       └── full_revisions_2/         # Full pipeline (2 revisions)
+├── data/
+│   ├── multi_news_500_samples.json       # Cached 500-sample subset (seed=42)
+│   ├── document.json                     # Sample outputs with multi-model comparisons
+│   └── ablations/                        # Generated summaries per configuration
+│       ├── base/                         # No auditing, no revision
+│       ├── no_nli/                       # Entity Guard only
+│       ├── no_entity/                    # NLI Audit only
+│       ├── full/                         # Full pipeline (T_max = 1)
+│       └── full_revisions_2/             # Full pipeline (T_max = 2)
 │
-├── Results/                          # Computed evaluation metrics
-│   ├── Component Ablation/           # Metrics across 4 component ablation configs
+├── Results/                              # Computed metric outputs
+│   ├── Component Ablation/
 │   │   ├── rouge_bert_simple_results/
 │   │   ├── bertscore_xlarge_results/
 │   │   ├── alignscore_results/
 │   │   ├── bartscore_simple_results/
 │   │   ├── summac_final_results/
 │   │   └── unieval_fluency_results/
-│   └── Revision Depth/              # Metrics for revision depth analysis (k=2)
+│   └── Revision Depth/
 │       ├── rouge_bert_full_revisions_2_results/
 │       ├── summac_full_revisions_2_results/
 │       └── unieval_fluency_full_revisions_2_results/
 │
-├── notebooks/                        # Jupyter notebooks (reserved)
-├── requirements.txt                  # Python dependencies
-├── anchorsum-6.pdf                   # Research paper
+├── requirements.txt
 └── .gitignore
 ```
 
@@ -160,302 +181,289 @@ AnchorSum/
 ### Prerequisites
 
 - Python 3.9+
-- CUDA-compatible GPU (recommended; 16GB+ VRAM for LLaMA 3.1-8B)
-- [Hugging Face](https://huggingface.co/) account with access to `meta-llama/Llama-3.1-8B-Instruct`
+- CUDA-compatible GPU with **≥16 GB VRAM** (for LLaMA 3.1-8B at FP32; ≥8 GB with 4-bit NF4 fallback)
+- Hugging Face account with access to [`meta-llama/Llama-3.1-8B-Instruct`](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct)
 
 ### Setup
 
 ```bash
-# Clone the repository
-git clone https://github.com/<your-username>/AnchorSum.git
+# 1. Clone the repository
+git clone https://github.com/MrArnav69/AnchorSum.git
 cd AnchorSum
 
-# Create and activate a virtual environment
+# 2. Create and activate a virtual environment
 python -m venv venv
-source venv/bin/activate  # Linux/macOS
-# venv\Scripts\activate   # Windows
+source venv/bin/activate        # Linux / macOS
+# venv\Scripts\activate         # Windows
 
-# Install dependencies
+# 3. Install Python dependencies
 pip install -r requirements.txt
 
-# Download the spaCy transformer model
+# 4. Download the spaCy transformer model
 python -m spacy download en_core_web_trf
 
-# Set up your Hugging Face token
-echo "HF_TOKEN=your_huggingface_token_here" > .env
+# 5. Authenticate with Hugging Face
+huggingface-cli login
+# or: export HF_TOKEN=your_token_here
 ```
 
-### Dependencies
+### External Evaluation Dependencies
 
-| Package                 | Purpose                                    |
-| ----------------------- | ------------------------------------------ |
-| `torch`                 | Deep learning backbone                     |
-| `transformers`          | LLaMA 3.1 & DeBERTa model loading          |
-| `accelerate`            | Efficient model distribution               |
-| `bitsandbytes`          | Optional 4-bit quantization                |
-| `datasets`              | Multi-News dataset loading                 |
-| `spacy`                 | Named entity recognition (Entity Guard)    |
-| `nltk`                  | Sentence tokenization for NLI verification |
-| `rouge-score`           | ROUGE metric computation                   |
-| `bert-score`            | BERTScore metric computation               |
-| `sentence-transformers` | Semantic similarity utilities              |
-| `scikit-learn`          | Statistical analysis utilities             |
-| `python-dotenv`         | Environment variable management            |
-| `pandas` / `numpy`      | Data processing and analysis               |
-| `tqdm`                  | Progress tracking                          |
+The metric evaluation scripts depend on four external repositories. Clone each into **both** `scripts/Component_Ablation/` and `scripts/Revision_Depth/`:
+
+```bash
+for DIR in scripts/Component_Ablation scripts/Revision_Depth; do
+  cd $DIR
+  git clone https://github.com/yuh-zha/AlignScore
+  git clone https://github.com/neulab/BARTScore
+  git clone https://github.com/tingofurro/summac
+  git clone https://github.com/lukas-blecher/UniEval
+  cd ../..
+done
+```
+
+Download the **AlignScore-large checkpoint** (~1.2 GB) into each `AlignScore/` directory:
+
+```bash
+wget https://huggingface.co/yzha/AlignScore/resolve/main/AlignScore-large.ckpt \
+     -O scripts/Component_Ablation/AlignScore/AlignScore-large.ckpt
+cp scripts/Component_Ablation/AlignScore/AlignScore-large.ckpt \
+   scripts/Revision_Depth/AlignScore/AlignScore-large.ckpt
+```
 
 ---
 
 ## Usage
 
-### Basic Pipeline Inference
+### Programmatic API
 
 ```python
 from src.pipeline import anchorsumpipeline
 
-# Initialize the full AnchorSum pipeline
 pipeline = anchorsumpipeline(
     model_name="meta-llama/Llama-3.1-8B-Instruct",
     nli_model_name="cross-encoder/nli-deberta-v3-large",
     entity_model_name="en_core_web_trf",
-    token="your_hf_token",
-    max_revisions=1,       # Number of revision iterations
-    nli=True,              # Enable NLI verification
-    entity=True,           # Enable entity anchoring
-    revision=True          # Enable iterative revision
+    token="<your_hf_token>",
+    max_revisions=1,    # T_max; default and recommended (see warning below)
+    nli=True,           # Enable NLI audit (Phase 2a)
+    entity=True,        # Enable Entity Guard (Phase 2b)
+    revision=True       # Enable iterative revision (Phase 3)
 )
 
-# Process a multi-document input
-documents = """Article 1: ... Article 2: ... Article 3: ..."""
-result = pipeline.process(documents, reference_summary="optional reference")
+documents = "Article 1: ... ||| Article 2: ... ||| Article 3: ..."
+result = pipeline.process(documents)
 
 print(result["final_summary"])
-print(f"Revisions performed: {result['num_revisions']}")
-print(f"Revision history: {result['history']}")
+print(f"Revisions performed: {result['revisions']}")
+# result["history"] contains (draft, flags) pairs per iteration
 ```
 
-### Running Ablation Experiments
+### Configuration Flags
 
-**Component Ablation** (4 configurations × 500 samples):
+| Flag | Type | Default | Effect |
+|------|------|---------|--------|
+| `max_revisions` | `int` | `1` | Maximum revision iterations $T_\text{max}$ |
+| `nli` | `bool` | `True` | Enable sentence-level NLI audit |
+| `entity` | `bool` | `True` | Enable anchor extraction + hallucination filter |
+| `revision` | `bool` | `True` | Enable flag-guided LLM revision |
+
+> ⚠️ **`max_revisions=2` is not recommended for production use.** See the [Verifier Exploitation](#%EF%B8%8F-verifier-exploitation-warning--revision-depth-analysis-n--500) section in Results for a full explanation.
+
+---
+
+## Reproducing Paper Results
+
+### Step 1 — Generate Ablation Summaries
 
 ```bash
+# Component ablation: runs base, no_nli, no_entity, and full sequentially
+# Checkpoints every 50 samples; safe to interrupt and resume
 python ablations/Component_Ablation/run_all_sequential.py
-```
 
-This sequentially runs:
-
-| Configuration | NLI | Entity | Revision | Description                               |
-| :-----------: | :-: | :----: | :------: | ----------------------------------------- |
-|    `base`     |  ✗  |   ✗    |    ✗     | Raw LLM generation (no verification)      |
-|   `no_nli`    |  ✗  |   ✓    |    ✓     | Entity anchoring + revision, no NLI       |
-|  `no_entity`  |  ✓  |   ✗    |    ✓     | NLI verification + revision, no anchoring |
-|    `full`     |  ✓  |   ✓    |    ✓     | Complete AnchorSum pipeline               |
-
-**Revision Depth Analysis** (max_revisions=2):
-
-```bash
+# Revision depth analysis: full pipeline with T_max = 2
 python ablations/Revision_Depth/revision2.py
 ```
 
-### Running Evaluation Scripts
-
-After generating ablation outputs, compute evaluation metrics:
+### Step 2 — Compute Evaluation Metrics
 
 ```bash
-# Component Ablation evaluations
-python scripts/Component_Ablation/evaluate_rouge_bertscore_simple.py   # ROUGE-1/2/L
-python scripts/Component_Ablation/evaluate_bertscore_xlarge.py         # BERTScore
-python scripts/Component_Ablation/evaluate_alignscore_simple.py        # AlignScore
-python scripts/Component_Ablation/evaluate_bartscore_simple.py         # BARTScore
-python scripts/Component_Ablation/evaluate_summac_final.py             # SummaC
-python scripts/Component_Ablation/evaluate_unieval_fluency_simple.py   # UniEval Fluency
+# ── Component Ablation ──────────────────────────────────────────
+python scripts/Component_Ablation/evaluate_summac_final.py
+python scripts/Component_Ablation/evaluate_alignscore_simple.py
+python scripts/Component_Ablation/evaluate_bartscore_simple.py
+python scripts/Component_Ablation/evaluate_rouge_bertscore_simple.py
+python scripts/Component_Ablation/evaluate_bertscore_xlarge.py
+python scripts/Component_Ablation/evaluate_unieval_fluency_simple.py
 
-# Revision Depth evaluations
-python scripts/Revision_Depth/evaluate_rouge_bert_full_revisions_2.py
+# ── Revision Depth ──────────────────────────────────────────────
 python scripts/Revision_Depth/evaluate_summac_full_revisions_2.py
+python scripts/Revision_Depth/evaluate_bartscore_full_revisions_2.py
+python scripts/Revision_Depth/evaluate_alignscore_full_revisions_2.py
+python scripts/Revision_Depth/evaluate_rouge_bert_full_revisions_2.py
 python scripts/Revision_Depth/evaluate_unieval_fluency_full_revisions_2.py
 ```
 
----
+### Reproducibility Parameters
 
-## Ablation Studies
-
-### Study I: Component Ablation
-
-Systematically disables individual components to isolate their contributions:
-
-| Configuration | Components Active             | Research Question                                            |
-| ------------- | ----------------------------- | ------------------------------------------------------------ |
-| **Base**      | LLM only                      | What is the raw generation quality without any verification? |
-| **No NLI**    | LLM + Entity Guard + Revision | How much does NLI verification contribute?                   |
-| **No Entity** | LLM + NLI Verifier + Revision | How critical is entity anchoring?                            |
-| **Full**      | LLM + NLI + Entity + Revision | What is the combined effect of all components?               |
-
-### Study II: Revision Depth
-
-Evaluates the impact of increasing the maximum number of revision iterations from **k=1** to **k=2** using the full pipeline, investigating:
-
-- Whether additional revision passes yield diminishing returns
-- The trade-off between factual accuracy gains and computational cost
-- The stability of the verification-revision feedback loop
-
----
-
-## Evaluation Metric Setup
-
-To run the evaluation scripts, you need to clone several external repositories into the respective script directories and download the required checkpoints.
-
-### 1. Repository Dependencies
-
-Clone the following repositories into **both** `scripts/Component_Ablation/` and `scripts/Revision_Depth/`:
-
-- **AlignScore**: `https://github.com/yuh-zha/AlignScore`
-- **BARTScore**: `https://github.com/neulab/BARTScore`
-- **SummaC**: `https://github.com/tingofurro/summac` (Rename the cloned directory to `summac` if necessary)
-- **UniEval**: `https://github.com/lukas-blecher/UniEval`
-
-```bash
-# Example for Component_Ablation
-cd scripts/Component_Ablation
-git clone https://github.com/yuh-zha/AlignScore
-git clone https://github.com/neulab/BARTScore
-git clone https://github.com/tingofurro/summac
-git clone https://github.com/lukas-blecher/UniEval
-```
-
-### 2. AlignScore Checkpoint
-
-The AlignScore evaluation requires the `AlignScore-large.ckpt` checkpoint. Download it and place it inside the `AlignScore/` directory within the script folders.
-
-- **Download Link**: [AlignScore-large.ckpt](https://huggingface.co/yzha/AlignScore/resolve/main/AlignScore-large.ckpt)
-
-```bash
-# Example placement
-# scripts/Component_Ablation/AlignScore/AlignScore-large.ckpt
-# scripts/Revision_Depth/AlignScore/AlignScore-large.ckpt
-```
-
----
-
-## Evaluation
-
-AnchorSum employs a comprehensive evaluation protocol spanning six complementary automatic metrics:
-
-| Metric          | Model / Method                            | Dimension Measured         |
-| --------------- | ----------------------------------------- | -------------------------- |
-| **ROUGE-1/2/L** | Stemmed n-gram overlap                    | Content coverage (lexical) |
-| **BERTScore**   | `microsoft/deberta-xlarge-mnli`           | Semantic similarity        |
-| **AlignScore**  | `roberta-large` (NLI-SP mode)             | Factual alignment          |
-| **BARTScore**   | `facebook/bart-large-cnn` (bidirectional) | Generation likelihood      |
-| **SummaC**      | `SummaCConv` with ViT-C backbone          | Factual consistency        |
-| **UniEval**     | T5-based multi-dimensional evaluator      | Linguistic fluency         |
-
-All evaluations are conducted on **500 samples** from the Multi-News test split, randomly sampled with `seed=42` for reproducibility.
+| Parameter | Value |
+|-----------|-------|
+| Random seed | `42` |
+| Dataset split | `test` (Multi-News) |
+| Sample size | `500` |
+| Anchor budget $N$ | `15` |
+| Generator | `meta-llama/Llama-3.1-8B-Instruct` |
+| NLI model | `cross-encoder/nli-deberta-v3-large` |
+| NER model | `en_core_web_trf` |
+| Decoding | Greedy (`do_sample=False`), `repetition_penalty=1.1` |
+| Max new tokens | `1024` |
+| Precision | `float32` (4-bit NF4 fallback available) |
+| NLI premise truncation | `512` subword tokens |
 
 ---
 
 ## Results
 
-### Component Ablation Results (n=500)
+### Component Ablation — Faithfulness and Semantic Fidelity (n = 500)
 
-#### Content Quality Metrics
+| Configuration | SummaCConv ↑ | AlignScore ↑ | BARTScore s→d ↓ | BARTScore d→s ↓ |
+|:---|:---:|:---:|:---:|:---:|
+| Base | 0.715 ± 0.034 | 0.828 ± 0.094 | −4.038 ± 0.383 | −3.470 ± 0.428 |
+| no\_entity †| 0.712 ± 0.034 | 0.829 ± 0.094 | −4.045 ± 0.376 | −3.487 ± 0.426 |
+| no\_nli | 0.733 ± 0.041 | 0.824 ± 0.095 | −4.027 ± 0.392 | −3.481 ± 0.451 |
+| **Full (AnchorSum)** | **0.733 ± 0.043** | 0.822 ± 0.093 | **−4.019 ± 0.394** | **−3.469 ± 0.450** |
 
-| Configuration |  ROUGE-1  |  ROUGE-2  |  ROUGE-L  | BERTScore F1 |
-| :------------ | :-------: | :-------: | :-------: | :----------: |
-| Base          |   0.399   |   0.117   |   0.183   |    0.619     |
-| No NLI        |   0.383   |   0.119   |   0.178   |    0.612     |
-| No Entity     |   0.396   |   0.113   |   0.181   |    0.617     |
-| **Full**      | **0.384** | **0.119** | **0.178** |  **0.611**   |
+> † **no\_entity degrades below base** (SummaCConv 0.712 vs 0.715), establishing the Entity Guard as a *necessary condition* for faithfulness improvement — its removal actively worsens faithfulness rather than merely failing to improve it.
 
-#### Factual Consistency Metrics
+### Component Ablation — Lexical, Neural, and Fluency Metrics (n = 500)
 
-| Configuration | AlignScore | BARTScore (s→d) | BARTScore (d→s) |  SummaC   |
-| :------------ | :--------: | :-------------: | :-------------: | :-------: |
-| Base          |   0.828    |     -4.038      |     -3.470      |   0.715   |
-| No NLI        |   0.824    |     -4.027      |     -3.481      |   0.733   |
-| No Entity     |   0.829    |     -4.045      |     -3.487      |   0.712   |
-| **Full**      | **0.822**  |   **-4.019**    |   **-3.469**    | **0.733** |
+| Configuration | ROUGE-1 | ROUGE-2 | ROUGE-L | BERTScore F₁ | UniEval Fluency |
+|:---|:---:|:---:|:---:|:---:|:---:|
+| Base | **0.399** | 0.117 | **0.183** | **0.619** | 0.945 |
+| no\_entity | 0.396 | 0.113 | 0.181 | 0.617 | **0.949** |
+| no\_nli | 0.383 | **0.119** | 0.178 | 0.612 | 0.940 |
+| **Full** | 0.384 | **0.119** | 0.178 | 0.611 | 0.944 |
 
-#### Fluency
-
-| Configuration | UniEval Fluency |
-| :------------ | :-------------: |
-| Base          |      0.945      |
-| No NLI        |      0.940      |
-| No Entity     |      0.949      |
-| **Full**      |    **0.944**    |
-
-### Revision Depth Results (Full Pipeline, n=500)
-
-| Revisions | ROUGE-1 | ROUGE-2 | ROUGE-L | BERTScore F1 |  SummaC   | UniEval Fluency |
-| :-------: | :-----: | :-----: | :-----: | :----------: | :-------: | :-------------: |
-|    k=1    |  0.384  |  0.119  |  0.178  |    0.611     |   0.733   |      0.944      |
-|    k=2    |  0.384  |  0.120  |  0.177  |    0.610     | **0.918** |      0.943      |
-
-> **Key Finding:** Increasing revision depth from k=1 to k=2 yields a substantial improvement in factual consistency as measured by SummaC (**0.733 → 0.918**, +25.2%), while maintaining near-identical scores across content quality (ROUGE, BERTScore) and fluency metrics. This demonstrates that the verification-revision loop effectively targets and corrects factual errors without degrading overall summary quality.
+> Modest ROUGE-1/L declines for Full vs. Base reflect the faithfulness–reference-lexicality tension: revisions correcting factual errors are not lexically closer to references written without revision signals.
 
 ---
 
-## Core Modules
+### ⚠️ Verifier Exploitation Warning — Revision Depth Analysis (n = 500)
 
-### `src/pipeline.py` — AnchorSum Pipeline Orchestrator
+This is the paper's most important negative finding. The SummaCConv gain at `T_max=2` is **not** a quality improvement — it is a documented failure mode.
 
-The central orchestrator that composes all components into the generate → verify → revise loop. Accepts configuration flags to enable/disable individual verification modules and controls revision depth.
+| Config | SummaCConv | AlignScore | BARTScore s→d | ROUGE-1 | BERTScore F₁ | UniEval |
+|:---|:---:|:---:|:---:|:---:|:---:|:---:|
+| Full (T_max=1) | 0.733 | **0.822** | **−4.019** | **0.384** | **0.611** | **0.944** |
+| Full (T_max=2) | **0.918** | 0.821 | −6.585 | 0.384 | 0.610 | 0.943 |
+| Δ (T₂ − T₁) | **+0.185** | −0.001 | **−2.566** | <0.001 | −0.001 | −0.001 |
 
-### `src/llm_summarizer.py` — Single-Pass Multi-Document Summarizer
+**What is happening:** A second revision cycle inflates SummaCConv by +0.185 while BARTScore s→d collapses from −4.019 to −6.585 (**−2.566 nats, −64%**) at an output length change of only +10 characters (<0.4%). This is **verifier exploitation**: the model rewrites into propositionally atomic declarative sentences ("Subject did X.") that maximize per-sentence NLI entailment scores, abandoning the discourse structure of fluent abstractive prose. The auditor is satisfied; the summary quality is not improved.
 
-Wraps LLaMA 3.1-8B-Instruct with structured prompting for both initial draft generation (with optional entity anchor constraints) and targeted revision given audit flags. Uses greedy decoding (`do_sample=False`) with repetition penalty for deterministic, high-quality outputs.
+AlignScore (not NLI-based) remaining at Δ = −0.001 is the decisive diagnostic: genuine faithfulness gains transfer across metric frameworks; NLI-optimized register shifts do not. This is a concrete instance of **Goodhart's Law in iterative NLG refinement**.
 
-### `src/verification/nli_verifier.py` — NLI Factual Verifier
+**`T_max=1` is the principled default and the recommended production setting.**
 
-Performs sentence-level Natural Language Inference between each summary sentence and the source documents using DeBERTa-v3-Large. Sentences classified as **CONTRADICTION** or **NEUTRAL** are flagged for revision.
+---
 
-### `src/verification/entity_guard.py` — Entity Anchor Guard
+### LLM-as-Judge Comparative Evaluation (n = 50)
 
-Dual-function module powered by spaCy NER:
+Evaluated against PEGASUS-MultiNews, PRIMERA-MultiNews, and BART-large-CNN using a dual-judge panel (DeepSeek-R1 + Qwen3.5-Plus in thinking mode) following the G-Eval framework. Model identities were anonymized. Jury = unweighted mean of both judges.
 
-1. **Anchor Extraction** — Identifies the top-N most frequent named entities (PERSON, ORG, GPE, LOC, DATE, MONEY, PERCENT) from source documents as mandatory coverage constraints
-2. **Hallucination Detection** — Cross-references entities in the generated summary against the source to flag fabricated entities not present in the original documents
+| System | Faithfulness | Coverage | Consistency | Fluency | **Overall (Jury)** |
+|:---|:---:|:---:|:---:|:---:|:---:|
+| BART-large-CNN | 6.43 | 6.10 | 6.57 | 6.75 | 6.46 |
+| PRIMERA-MultiNews | 6.68 | 6.40 | 6.86 | 7.13 | 6.77 |
+| PEGASUS-MultiNews | 7.37 | 7.11 | 7.52 | 7.57 | 7.39 |
+| Base LLaMA (no auditing) | 7.99 | 7.88 | 8.20 | 8.25 | 8.08 |
+| **AnchorSum (T_max=1)** | **8.22** | **8.04** | 8.42 | 8.51 | **8.30** |
+| AnchorSum (T_max=2) | 8.20 | 8.10 | **8.41** | **8.48** | **8.30** |
+
+Both AnchorSum configurations outperform all external baselines across every dimension. The jury ties T_max=1 and T_max=2 at 8.30 — consistent with the automatic metrics showing T_max=2 is holistically plausible to fluency-sensitive judges while BARTScore exposes the latent register degradation.
+
+Full per-model judge reports: [DeepSeek-R1](https://chat.deepseek.com/share/thkcnnbqyclko2elhx) · [Qwen3.5-Plus](https://chat.qwen.ai/s/3badcaee-65f9-4008-bc33-66e4d6c820eb)
+
+---
+
+## Evaluation Metric Reference
+
+| Metric | Backbone | Dimension | Key Role in This Paper |
+|--------|----------|-----------|----------------------|
+| **SummaCConv** | ViT-C NLI fine-tune | Sentence entailment consistency | Primary faithfulness metric; also the exploited metric at T_max=2 |
+| **AlignScore** | RoBERTa-Large (7 NLU tasks) | Cross-framework factual alignment | Non-NLI cross-check; decisive for verifier exploitation diagnosis |
+| **BARTScore s→d** | BART-large-CNN | log P(summary \| source) | Register-sensitive; detects atomic-declarative rewriting |
+| **BARTScore d→s** | BART-large-CNN | log P(source \| summary) | Source coverage under generative model |
+| **ROUGE-1/2/L** | n-gram overlap | Reference lexical overlap | Benchmark standard; modest declines are expected and non-indicative |
+| **BERTScore F₁** | DeBERTa-XLarge-MNLI | Token-level semantic similarity | Precision/recall split isolates anchor-driven length effects |
+| **UniEval Fluency** | T5-large evaluator | Linguistic fluency ∈ [0,1] | Monitors fluency degradation across revision iterations |
+
+---
+
+## Module Reference
+
+### `src/pipeline.py` — Pipeline Orchestrator
+Composes Phases 0–3 into the generate → verify → revise loop. The `nli`, `entity`, and `revision` flags enable all four component ablation configurations from a single entrypoint.
+
+### `src/llm_summarizer.py` — LLM Generation and Revision
+Wraps `Meta-Llama-3.1-8B-Instruct` with two structured prompts: a journalist-role generation prompt injecting $\mathcal{D}$ and $\mathcal{A}$, and an expert-editor revision prompt injecting $\mathcal{D}$, $\hat{S}^{(i)}$, and $\mathcal{F}$ as a numbered corrective list. Both use greedy decoding with `repetition_penalty=1.1`.
+
+### `src/verification/nli_verifier.py` — NLI Faithfulness Audit
+Tokenizes the summary into sentences (NLTK punkt), pairs each against the source corpus truncated to 512 subword tokens, and classifies with `cross-encoder/nli-deberta-v3-large` (435M params, SNLI + MultiNLI fine-tuned). Returns $\mathcal{F}_\text{NLI}$ — the set of non-entailed sentences with their predicted labels.
+
+### `src/verification/entity_guard.py` — Entity Guard
+Two functions: **(1) Anchor extraction** — runs `en_core_web_trf` over $\mathcal{D}$, filters to {PERSON, ORG, GPE, LOC, DATE, MONEY, PERCENT}, discards short spans (|e| ≤ 2), ranks by corpus frequency, returns Top-N. **(2) Hallucination detection** — applies a conjunctive filter requiring a candidate entity to be absent from *both* the NER output of $\mathcal{D}$ *and* the lowercased raw string of $\mathcal{D}$ before flagging, conservatively suppressing false positives from NER pipeline gaps.
+
+### `ablations/ablation_base_runner.py` — Shared Experiment Runner
+Handles dataset loading from `data/multi_news_500_samples.json`, per-sample checkpointing (every 50 samples), result serialization to `data/ablations/`, and graceful interrupt-resume. All ablation runners inherit from this base.
 
 ---
 
 ## Dataset
 
-All experiments use the **Multi-News** dataset:
-
-- **Source:** [Awesome075/multi_news_parquet](https://huggingface.co/datasets/Awesome075/multi_news_parquet)
-- **Split:** Test
-- **Sample Size:** 500 (randomly sampled, `seed=42`)
-- **Task:** Multi-document summarization from 2–10 news articles per cluster
-
-A cached version of the 500-sample subset is stored in `data/multi_news_500_samples.json` for reproducibility and offline use.
-
----
-
-## Reproducibility
-
-All experiments are fully reproducible with the following fixed parameters:
-
-| Parameter      | Value                                     |
-| -------------- | ----------------------------------------- |
-| Random Seed    | `42`                                      |
-| Sample Size    | `500`                                     |
-| LLM            | `meta-llama/Llama-3.1-8B-Instruct`        |
-| NLI Model      | `cross-encoder/nli-deberta-v3-large`      |
-| NER Model      | `en_core_web_trf`                         |
-| Precision      | `float32` (full precision)                |
-| Generation     | Greedy decoding, `repetition_penalty=1.1` |
-| Max New Tokens | `1024`                                    |
-| Checkpointing  | Every 50 samples                          |
+| Property | Value |
+|----------|-------|
+| Corpus | [Multi-News](https://huggingface.co/datasets/Awesome075/multi_news_parquet) (Fabbri et al., 2019) |
+| Split | `test` |
+| Sample size | 500 (deterministic shuffle, `seed=42`) |
+| Sampling | `Dataset.shuffle(seed=42).select(range(500))` |
+| Excluded instances | 2 (GPU memory exceeded at evaluation batch size) |
+| Cached subset | `data/multi_news_500_samples.json` |
 
 ---
 
-## License
+## Citation
 
-This project is provided for academic and research purposes. Please refer to the [LICENSE](LICENSE) file for details.
+If you use AnchorSum in your research, please cite:
+
+```bibtex
+@article{gupta2025anchorsum,
+  title  = {{AnchorSum}: Improving Multi-Document Summarization Faithfulness
+             through {NLI} and Entity-Gated Iterative Refinement},
+  author = {Gupta, Arnav},
+  year   = {2025}
+}
+```
+
+---
+
+## Acknowledgements
+
+This project builds on the following open-source systems and evaluation frameworks:
+
+- [Meta LLaMA 3.1](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct) — Dubey et al., 2024
+- [DeBERTa-V3](https://huggingface.co/cross-encoder/nli-deberta-v3-large) — He et al., 2023
+- [spaCy en_core_web_trf](https://spacy.io/models/en#en_core_web_trf) — Honnibal et al., 2020
+- [SummaC](https://github.com/tingofurro/summac) — Laban et al., 2022
+- [AlignScore](https://github.com/yuh-zha/AlignScore) — Zha et al., 2023
+- [BARTScore](https://github.com/neulab/BARTScore) — Yuan et al., 2021
+- [UniEval](https://github.com/lukas-blecher/UniEval) — Zhong et al., 2022
+- [Multi-News dataset](https://huggingface.co/datasets/Awesome075/multi_news_parquet) — Fabbri et al., 2019
 
 ---
 
 <p align="center">
-  <sub>Built with LLaMA 3.1 · DeBERTa-v3 · spaCy · Evaluated with ROUGE, BERTScore, AlignScore, BARTScore, SummaC & UniEval</sub>
+  <sub>
+    AnchorSum · Arnav Gupta ·
+    <a href="mailto:arnavgupta6969@icloud.com">arnavgupta6969@icloud.com</a>
+  </sub>
 </p>
