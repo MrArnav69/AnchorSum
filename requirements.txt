@@ -6,7 +6,10 @@ datasets
 spacy[transformers]
 nltk
 rouge-score
+bert-score
 sentence-transformers
 numpy
+pandas
 tqdm
 python-dotenv
+scikit-learn
