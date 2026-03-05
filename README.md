@@ -151,7 +151,7 @@ AnchorSum/
 │
 ├── Results/                              # Computed metric outputs
 │   ├── Component Ablation/
-│   │   ├── rouge_bert_simple_results/ #BERTScore Broken - Do Not Use (Use bertscore_xlarge_results.py)
+│   │   ├── rouge_bert_simple_results/ #BERTScore Broken - Do Not Use (Use bertscore_xlarge_results)
 │   │   ├── bertscore_xlarge_results/
 │   │   ├── alignscore_results/
 │   │   ├── bartscore_simple_results/
