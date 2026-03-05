@@ -27,18 +27,18 @@ Abstractive multi-document summarization systems optimized for conditional log-l
 3. **Dual-mode faithfulness auditing** — two independent, complementary verifiers assess the draft: a cross-encoder NLI model (`cross-encoder/nli-deberta-v3-large`) checks sentence-level entailment; a conjunctive entity filter checks anchor coverage and extrinsic hallucination. Together they produce a structured flag set $\mathcal{F} = \mathcal{F}_\text{NLI} \cup \mathcal{F}_\text{ENT}$.
 4. **Flag-guided iterative revision** — the LLM is re-prompted in an expert-editor role with $\mathcal{F}$ as a numbered corrective list. Critically, feedback originates from **external neural verifiers**, not LLM self-assessment, eliminating sycophantic self-evaluation artifacts.
 
-> **Evaluated on 500 Multi-News test instances** across six automatic metrics and on 50 instances via a dual-judge LLM-as-judge panel (DeepSeek-R1 + Qwen3.5-Plus thinking mode). AnchorSum achieves a **6.3% relative SummaCConv improvement** over the unaugmented generator and outperforms PEGASUS-MultiNews, PRIMERA-MultiNews, and BART-large-CNN across every faithfulness dimension.
+> **Evaluated on 500 Multi-News test instances** across six automatic metrics and on 50 instances via a dual-judge LLM-as-judge panel (DeepSeek-V3.1 + Qwen3.5-Plus thinking mode). AnchorSum achieves a **6.3% relative SummaCConv improvement** over the unaugmented generator and outperforms PEGASUS-MultiNews, PRIMERA-MultiNews, and BART-large-CNN across every faithfulness dimension.
 
 ---
 
 ## Key Contributions
 
-| # | Contribution | Location |
-|---|---|---|
-| 1 | **Anchor-conditioned generation** — corpus-frequency entity anchors serve as both generative soft constraints and post-hoc verification targets | `src/verification/entity_guard.py` |
-| 2 | **Dual-mode auditing** — NLI (sentence-level semantic inconsistency) and Entity Guard (extrinsic hallucination) address non-overlapping failure modes in Maynez et al.'s hallucination taxonomy | `src/verification/` |
-| 3 | **Externally grounded revision** — structured flag feedback from independent neural verifiers, explicitly avoiding Self-Refine-style sycophancy | `src/llm_summarizer.py` |
-| 4 | **Verifier exploitation as a novel failure mode** — a second revision cycle inflates SummaCConv by +0.185 while collapsing BARTScore s→d by −2.566 nats at <0.4% output length change; we provide a principled multi-metric triangulation methodology for detecting it | `ablations/Revision_Depth/` |
+| #   | Contribution                                                                                                                                                                                                                                                           | Location                           |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| 1   | **Anchor-conditioned generation** — corpus-frequency entity anchors serve as both generative soft constraints and post-hoc verification targets                                                                                                                        | `src/verification/entity_guard.py` |
+| 2   | **Dual-mode auditing** — NLI (sentence-level semantic inconsistency) and Entity Guard (extrinsic hallucination) address non-overlapping failure modes in Maynez et al.'s hallucination taxonomy                                                                        | `src/verification/`                |
+| 3   | **Externally grounded revision** — structured flag feedback from independent neural verifiers, explicitly avoiding Self-Refine-style sycophancy                                                                                                                        | `src/llm_summarizer.py`            |
+| 4   | **Verifier exploitation as a novel failure mode** — a second revision cycle inflates SummaCConv by +0.185 while collapsing BARTScore s→d by −2.566 nats at <0.4% output length change; we provide a principled multi-metric triangulation methodology for detecting it | `ablations/Revision_Depth/`        |
 
 ---
 
@@ -255,12 +255,12 @@ print(f"Revisions performed: {result['revisions']}")
 
 ### Configuration Flags
 
-| Flag | Type | Default | Effect |
-|------|------|---------|--------|
-| `max_revisions` | `int` | `1` | Maximum revision iterations $T_\text{max}$ |
-| `nli` | `bool` | `True` | Enable sentence-level NLI audit |
-| `entity` | `bool` | `True` | Enable anchor extraction + hallucination filter |
-| `revision` | `bool` | `True` | Enable flag-guided LLM revision |
+| Flag            | Type   | Default | Effect                                          |
+| --------------- | ------ | ------- | ----------------------------------------------- |
+| `max_revisions` | `int`  | `1`     | Maximum revision iterations $T_\text{max}$      |
+| `nli`           | `bool` | `True`  | Enable sentence-level NLI audit                 |
+| `entity`        | `bool` | `True`  | Enable anchor extraction + hallucination filter |
+| `revision`      | `bool` | `True`  | Enable flag-guided LLM revision                 |
 
 > ⚠️ **`max_revisions=2` is not recommended for production use.** See the [Verifier Exploitation](#%EF%B8%8F-verifier-exploitation-warning--revision-depth-analysis-n--500) section in Results for a full explanation.
 
@@ -300,19 +300,19 @@ python scripts/Revision_Depth/evaluate_unieval_fluency_full_revisions_2.py
 
 ### Reproducibility Parameters
 
-| Parameter | Value |
-|-----------|-------|
-| Random seed | `42` |
-| Dataset split | `test` (Multi-News) |
-| Sample size | `500` |
-| Anchor budget $N$ | `15` |
-| Generator | `meta-llama/Llama-3.1-8B-Instruct` |
-| NLI model | `cross-encoder/nli-deberta-v3-large` |
-| NER model | `en_core_web_trf` |
-| Decoding | Greedy (`do_sample=False`), `repetition_penalty=1.1` |
-| Max new tokens | `1024` |
-| Precision | `float32` (4-bit NF4 fallback available) |
-| NLI premise truncation | `512` subword tokens |
+| Parameter              | Value                                                |
+| ---------------------- | ---------------------------------------------------- |
+| Random seed            | `42`                                                 |
+| Dataset split          | `test` (Multi-News)                                  |
+| Sample size            | `500`                                                |
+| Anchor budget $N$      | `15`                                                 |
+| Generator              | `meta-llama/Llama-3.1-8B-Instruct`                   |
+| NLI model              | `cross-encoder/nli-deberta-v3-large`                 |
+| NER model              | `en_core_web_trf`                                    |
+| Decoding               | Greedy (`do_sample=False`), `repetition_penalty=1.1` |
+| Max new tokens         | `1024`                                               |
+| Precision              | `float32` (4-bit NF4 fallback available)             |
+| NLI premise truncation | `512` subword tokens                                 |
 
 ---
 
@@ -320,23 +320,23 @@ python scripts/Revision_Depth/evaluate_unieval_fluency_full_revisions_2.py
 
 ### Component Ablation — Faithfulness and Semantic Fidelity (n = 500)
 
-| Configuration | SummaCConv ↑ | AlignScore ↑ | BARTScore s→d ↓ | BARTScore d→s ↓ |
-|:---|:---:|:---:|:---:|:---:|
-| Base | 0.715 ± 0.034 | 0.828 ± 0.094 | −4.038 ± 0.383 | −3.470 ± 0.428 |
-| no\_entity †| 0.712 ± 0.034 | 0.829 ± 0.094 | −4.045 ± 0.376 | −3.487 ± 0.426 |
-| no\_nli | 0.733 ± 0.041 | 0.824 ± 0.095 | −4.027 ± 0.392 | −3.481 ± 0.451 |
+| Configuration        |   SummaCConv ↑    | AlignScore ↑  |  BARTScore s→d ↓   |  BARTScore d→s ↓   |
+| :------------------- | :---------------: | :-----------: | :----------------: | :----------------: |
+| Base                 |   0.715 ± 0.034   | 0.828 ± 0.094 |   −4.038 ± 0.383   |   −3.470 ± 0.428   |
+| no_entity †          |   0.712 ± 0.034   | 0.829 ± 0.094 |   −4.045 ± 0.376   |   −3.487 ± 0.426   |
+| no_nli               |   0.733 ± 0.041   | 0.824 ± 0.095 |   −4.027 ± 0.392   |   −3.481 ± 0.451   |
 | **Full (AnchorSum)** | **0.733 ± 0.043** | 0.822 ± 0.093 | **−4.019 ± 0.394** | **−3.469 ± 0.450** |
 
-> † **no\_entity degrades below base** (SummaCConv 0.712 vs 0.715), establishing the Entity Guard as a *necessary condition* for faithfulness improvement — its removal actively worsens faithfulness rather than merely failing to improve it.
+> † **no_entity degrades below base** (SummaCConv 0.712 vs 0.715), establishing the Entity Guard as a _necessary condition_ for faithfulness improvement — its removal actively worsens faithfulness rather than merely failing to improve it.
 
 ### Component Ablation — Lexical, Neural, and Fluency Metrics (n = 500)
 
-| Configuration | ROUGE-1 | ROUGE-2 | ROUGE-L | BERTScore F₁ | UniEval Fluency |
-|:---|:---:|:---:|:---:|:---:|:---:|
-| Base | **0.399** | 0.117 | **0.183** | **0.619** | 0.945 |
-| no\_entity | 0.396 | 0.113 | 0.181 | 0.617 | **0.949** |
-| no\_nli | 0.383 | **0.119** | 0.178 | 0.612 | 0.940 |
-| **Full** | 0.384 | **0.119** | 0.178 | 0.611 | 0.944 |
+| Configuration |  ROUGE-1  |  ROUGE-2  |  ROUGE-L  | BERTScore F₁ | UniEval Fluency |
+| :------------ | :-------: | :-------: | :-------: | :----------: | :-------------: |
+| Base          | **0.399** |   0.117   | **0.183** |  **0.619**   |      0.945      |
+| no_entity     |   0.396   |   0.113   |   0.181   |    0.617     |    **0.949**    |
+| no_nli        |   0.383   | **0.119** |   0.178   |    0.612     |      0.940      |
+| **Full**      |   0.384   | **0.119** |   0.178   |    0.611     |      0.944      |
 
 > Modest ROUGE-1/L declines for Full vs. Base reflect the faithfulness–reference-lexicality tension: revisions correcting factual errors are not lexically closer to references written without revision signals.
 
@@ -346,11 +346,11 @@ python scripts/Revision_Depth/evaluate_unieval_fluency_full_revisions_2.py
 
 This is the paper's most important negative finding. The SummaCConv gain at `T_max=2` is **not** a quality improvement — it is a documented failure mode.
 
-| Config | SummaCConv | AlignScore | BARTScore s→d | ROUGE-1 | BERTScore F₁ | UniEval |
-|:---|:---:|:---:|:---:|:---:|:---:|:---:|
-| Full (T_max=1) | 0.733 | **0.822** | **−4.019** | **0.384** | **0.611** | **0.944** |
-| Full (T_max=2) | **0.918** | 0.821 | −6.585 | 0.384 | 0.610 | 0.943 |
-| Δ (T₂ − T₁) | **+0.185** | −0.001 | **−2.566** | <0.001 | −0.001 | −0.001 |
+| Config         | SummaCConv | AlignScore | BARTScore s→d |  ROUGE-1  | BERTScore F₁ |  UniEval  |
+| :------------- | :--------: | :--------: | :-----------: | :-------: | :----------: | :-------: |
+| Full (T_max=1) |   0.733    | **0.822**  |  **−4.019**   | **0.384** |  **0.611**   | **0.944** |
+| Full (T_max=2) | **0.918**  |   0.821    |    −6.585     |   0.384   |    0.610     |   0.943   |
+| Δ (T₂ − T₁)    | **+0.185** |   −0.001   |  **−2.566**   |  <0.001   |    −0.001    |  −0.001   |
 
 **What is happening:** A second revision cycle inflates SummaCConv by +0.185 while BARTScore s→d collapses from −4.019 to −6.585 (**−2.566 nats, −64%**) at an output length change of only +10 characters (<0.4%). This is **verifier exploitation**: the model rewrites into propositionally atomic declarative sentences ("Subject did X.") that maximize per-sentence NLI entailment scores, abandoning the discourse structure of fluent abstractive prose. The auditor is satisfied; the summary quality is not improved.
 
@@ -362,72 +362,76 @@ AlignScore (not NLI-based) remaining at Δ = −0.001 is the decisive diagnostic
 
 ### LLM-as-Judge Comparative Evaluation (n = 50)
 
-Evaluated against PEGASUS-MultiNews, PRIMERA-MultiNews, and BART-large-CNN using a dual-judge panel (DeepSeek-R1 + Qwen3.5-Plus in thinking mode) following the G-Eval framework. Model identities were anonymized. Jury = unweighted mean of both judges.
+Evaluated against PEGASUS-MultiNews, PRIMERA-MultiNews, and BART-large-CNN using a dual-judge panel (DeepSeek-V3.1 + Qwen3.5-Plus in thinking mode) following the G-Eval framework. Model identities were anonymized. Jury = unweighted mean of both judges.
 
-| System | Faithfulness | Coverage | Consistency | Fluency | **Overall (Jury)** |
-|:---|:---:|:---:|:---:|:---:|:---:|
-| BART-large-CNN | 6.43 | 6.10 | 6.57 | 6.75 | 6.46 |
-| PRIMERA-MultiNews | 6.68 | 6.40 | 6.86 | 7.13 | 6.77 |
-| PEGASUS-MultiNews | 7.37 | 7.11 | 7.52 | 7.57 | 7.39 |
-| Base LLaMA (no auditing) | 7.99 | 7.88 | 8.20 | 8.25 | 8.08 |
-| **AnchorSum (T_max=1)** | **8.22** | **8.04** | 8.42 | 8.51 | **8.30** |
-| AnchorSum (T_max=2) | 8.20 | 8.10 | **8.41** | **8.48** | **8.30** |
+| System                   | Faithfulness | Coverage | Consistency | Fluency  | **Overall (Jury)** |
+| :----------------------- | :----------: | :------: | :---------: | :------: | :----------------: |
+| BART-large-CNN           |     6.43     |   6.10   |    6.57     |   6.75   |        6.46        |
+| PRIMERA-MultiNews        |     6.68     |   6.40   |    6.86     |   7.13   |        6.77        |
+| PEGASUS-MultiNews        |     7.37     |   7.11   |    7.52     |   7.57   |        7.39        |
+| Base LLaMA (no auditing) |     7.99     |   7.88   |    8.20     |   8.25   |        8.08        |
+| **AnchorSum (T_max=1)**  |   **8.22**   | **8.04** |    8.42     |   8.51   |      **8.30**      |
+| AnchorSum (T_max=2)      |     8.20     |   8.10   |  **8.41**   | **8.48** |      **8.30**      |
 
 Both AnchorSum configurations outperform all external baselines across every dimension. The jury ties T_max=1 and T_max=2 at 8.30 — consistent with the automatic metrics showing T_max=2 is holistically plausible to fluency-sensitive judges while BARTScore exposes the latent register degradation.
 
-Full per-model judge reports: [DeepSeek-R1](https://chat.deepseek.com/share/thkcnnbqyclko2elhx) · [Qwen3.5-Plus](https://chat.qwen.ai/s/3badcaee-65f9-4008-bc33-66e4d6c820eb)
+Full per-model judge reports: [DeepSeek-V3.1](https://chat.deepseek.com/share/thkcnnbqyclko2elhx) · [Qwen3.5-Plus](https://chat.qwen.ai/s/3badcaee-65f9-4008-bc33-66e4d6c820eb)
 
 ---
 
 ## Evaluation Metric Reference
 
-| Metric | Backbone | Dimension | Key Role in This Paper |
-|--------|----------|-----------|----------------------|
-| **SummaCConv** | ViT-C NLI fine-tune | Sentence entailment consistency | Primary faithfulness metric; also the exploited metric at T_max=2 |
-| **AlignScore** | RoBERTa-Large (7 NLU tasks) | Cross-framework factual alignment | Non-NLI cross-check; decisive for verifier exploitation diagnosis |
-| **BARTScore s→d** | BART-large-CNN | log P(summary \| source) | Register-sensitive; detects atomic-declarative rewriting |
-| **BARTScore d→s** | BART-large-CNN | log P(source \| summary) | Source coverage under generative model |
-| **ROUGE-1/2/L** | n-gram overlap | Reference lexical overlap | Benchmark standard; modest declines are expected and non-indicative |
-| **BERTScore F₁** | DeBERTa-XLarge-MNLI | Token-level semantic similarity | Precision/recall split isolates anchor-driven length effects |
-| **UniEval Fluency** | T5-large evaluator | Linguistic fluency ∈ [0,1] | Monitors fluency degradation across revision iterations |
+| Metric              | Backbone                    | Dimension                         | Key Role in This Paper                                              |
+| ------------------- | --------------------------- | --------------------------------- | ------------------------------------------------------------------- |
+| **SummaCConv**      | ViT-C NLI fine-tune         | Sentence entailment consistency   | Primary faithfulness metric; also the exploited metric at T_max=2   |
+| **AlignScore**      | RoBERTa-Large (7 NLU tasks) | Cross-framework factual alignment | Non-NLI cross-check; decisive for verifier exploitation diagnosis   |
+| **BARTScore s→d**   | BART-large-CNN              | log P(summary \| source)          | Register-sensitive; detects atomic-declarative rewriting            |
+| **BARTScore d→s**   | BART-large-CNN              | log P(source \| summary)          | Source coverage under generative model                              |
+| **ROUGE-1/2/L**     | n-gram overlap              | Reference lexical overlap         | Benchmark standard; modest declines are expected and non-indicative |
+| **BERTScore F₁**    | DeBERTa-XLarge-MNLI         | Token-level semantic similarity   | Precision/recall split isolates anchor-driven length effects        |
+| **UniEval Fluency** | T5-large evaluator          | Linguistic fluency ∈ [0,1]        | Monitors fluency degradation across revision iterations             |
 
 ---
 
 ## Module Reference
 
 ### `src/pipeline.py` — Pipeline Orchestrator
+
 Composes Phases 0–3 into the generate → verify → revise loop. The `nli`, `entity`, and `revision` flags enable all four component ablation configurations from a single entrypoint.
 
 ### `src/llm_summarizer.py` — LLM Generation and Revision
+
 Wraps `Meta-Llama-3.1-8B-Instruct` with two structured prompts: a journalist-role generation prompt injecting $\mathcal{D}$ and $\mathcal{A}$, and an expert-editor revision prompt injecting $\mathcal{D}$, $\hat{S}^{(i)}$, and $\mathcal{F}$ as a numbered corrective list. Both use greedy decoding with `repetition_penalty=1.1`.
 
 ### `src/verification/nli_verifier.py` — NLI Faithfulness Audit
+
 Tokenizes the summary into sentences (NLTK punkt), pairs each against the source corpus truncated to 512 subword tokens, and classifies with `cross-encoder/nli-deberta-v3-large` (435M params, SNLI + MultiNLI fine-tuned). Returns $\mathcal{F}_\text{NLI}$ — the set of non-entailed sentences with their predicted labels.
 
 ### `src/verification/entity_guard.py` — Entity Guard
-Two functions: **(1) Anchor extraction** — runs `en_core_web_trf` over $\mathcal{D}$, filters to {PERSON, ORG, GPE, LOC, DATE, MONEY, PERCENT}, discards short spans (|e| ≤ 2), ranks by corpus frequency, returns Top-N. **(2) Hallucination detection** — applies a conjunctive filter requiring a candidate entity to be absent from *both* the NER output of $\mathcal{D}$ *and* the lowercased raw string of $\mathcal{D}$ before flagging, conservatively suppressing false positives from NER pipeline gaps.
+
+Two functions: **(1) Anchor extraction** — runs `en_core_web_trf` over $\mathcal{D}$, filters to {PERSON, ORG, GPE, LOC, DATE, MONEY, PERCENT}, discards short spans (|e| ≤ 2), ranks by corpus frequency, returns Top-N. **(2) Hallucination detection** — applies a conjunctive filter requiring a candidate entity to be absent from _both_ the NER output of $\mathcal{D}$ _and_ the lowercased raw string of $\mathcal{D}$ before flagging, conservatively suppressing false positives from NER pipeline gaps.
 
 ### `ablations/ablation_base_runner.py` — Shared Experiment Runner
+
 Handles dataset loading from `data/multi_news_500_samples.json`, per-sample checkpointing (every 50 samples), result serialization to `data/ablations/`, and graceful interrupt-resume. All ablation runners inherit from this base.
 
 ---
 
 ## Dataset
 
-| Property | Value |
-|----------|-------|
-| Corpus | [Multi-News](https://huggingface.co/datasets/Awesome075/multi_news_parquet) (Fabbri et al., 2019) |
-| Split | `test` |
-| Sample size | 500 (deterministic shuffle, `seed=42`) |
-| Sampling | `Dataset.shuffle(seed=42).select(range(500))` |
-| Excluded instances | 2 (GPU memory exceeded at evaluation batch size) |
-| Cached subset | `data/multi_news_500_samples.json` |
+| Property           | Value                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------- |
+| Corpus             | [Multi-News](https://huggingface.co/datasets/Awesome075/multi_news_parquet) (Fabbri et al., 2019) |
+| Split              | `test`                                                                                            |
+| Sample size        | 500 (deterministic shuffle, `seed=42`)                                                            |
+| Sampling           | `Dataset.shuffle(seed=42).select(range(500))`                                                     |
+| Excluded instances | 2 (GPU memory exceeded at evaluation batch size)                                                  |
+| Cached subset      | `data/multi_news_500_samples.json`                                                                |
 
 ---
 
-
 ## AI Use Disclosure
 
-This project utilized AI assistants (including Anthropic Claude, Google Gemini, Kimi, and other AI tools) for Code Assistance, Debugging, and help with Evaluation of Metrics. 
+This project utilized AI assistants (including Anthropic Claude, Google Gemini, Kimi, and other AI tools) for Code Assistance, Debugging, and help with Evaluation of Metrics.
 
 All core research contributions, algorithmic designs (NLI-Entity Gated Refinement), and final evaluation results are the original work of the author.
