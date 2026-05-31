@@ -4,7 +4,7 @@ from scipy.stats import wilcoxon
 
 def run_tests():
 
-    base_dir = "/Users/mrarnav69/Documents/AnchorSum"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
     summac_base_path = os.path.join(base_dir, "Results", "Component Ablation ", "summac_final_results", "summac_detailed_base.csv")
     summac_full_path = os.path.join(base_dir, "Results", "Component Ablation ", "summac_final_results", "summac_detailed_full.csv")
     summac_noentity_path = os.path.join(base_dir, "Results", "Component Ablation ", "summac_final_results", "summac_detailed_no_entity.csv")
