@@ -4,9 +4,7 @@
     <strong>Supplementary Material & Code Repository</strong><br/>
     <em>Verifier Exploitation in NLI-Guided Iterative Refinement: A Controlled Empirical Analysis</em>
   </p>
-  <p align="center">
-    <em>Under review as submission to Transactions on Machine Learning Research (TMLR)</em>
-  </p>
+
   <p align="center">
     <a href="#overview">Overview</a> ·
     <a href="#system-architecture">Architecture</a> ·
