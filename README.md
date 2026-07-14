@@ -1,10 +1,8 @@
 <p align="center">
   <h1 align="center">AnchorSum</h1>
   <p align="center">
-    <strong>Supplementary Material & Code Repository</strong><br/>
-    <em>Verifier Exploitation in NLI-Guided Iterative Refinement: A Controlled Empirical Analysis</em>
+    <strong>Supplementary Material & Code Repository</strong>
   </p>
-
   <p align="center">
     <a href="#overview">Overview</a> ·
     <a href="#system-architecture">Architecture</a> ·
@@ -21,7 +19,7 @@
 
 ## Overview
 
-This repository contains the complete source code, experimental infrastructure, precomputed results, and evaluation scripts accompanying the paper *"Verifier Exploitation in NLI-Guided Iterative Refinement: A Controlled Empirical Analysis."*
+This repository contains the complete source code, experimental infrastructure, precomputed results, and evaluation scripts.
 
 **AnchorSum** is a modular, training-free pipeline for faithful multi-document summarization. It combines entity-guided anchor extraction, anchor-conditioned draft generation, dual-mode faithfulness auditing (sentence-level NLI + entity hallucination filtering), and flag-guided iterative revision — all without modifying any model weights. The pipeline serves as the controlled experimental vehicle for demonstrating that **verifier exploitation** — satisfying an NLI auditing metric while degrading real faithfulness — manifests even in zero-gradient, prompt-only refinement loops.
 
@@ -93,7 +91,7 @@ Source Corpus D = d₁ ‖ … ‖ dₖ
   Default: T_max = 1 (recommended; T_max=2 triggers verifier exploitation)
 ```
 
-The pipeline decouples generation from verification: the LLM generates and revises, while independent neural auditors (DeBERTa-v3-Large for NLI, spaCy RoBERTa-base for entity grounding) supply structured feedback. This separation enables precise mechanistic attribution in the component ablation (§6 of the paper).
+The pipeline decouples generation from verification: the LLM generates and revises, while independent neural auditors (DeBERTa-v3-Large for NLI, spaCy RoBERTa-base for entity grounding) supply structured feedback. This separation enables precise mechanistic attribution in the component ablation.
 
 ---
 
@@ -219,7 +217,7 @@ print(result["final_summary"])
 print(f"Revisions performed: {result['num_revisions']}")
 ```
 
-> ⚠️ **`max_revisions=2` is not recommended.** A second revision cycle triggers verifier exploitation — inflating SummaCConv while collapsing BARTScore s→d on 100% of instances. See the paper (§5) for the full mechanistic analysis.
+> ⚠️ **`max_revisions=2` is not recommended.** A second revision cycle triggers verifier exploitation — inflating SummaCConv while collapsing BARTScore s→d on 100% of instances.
 
 ---
 
@@ -259,7 +257,7 @@ print(f"Revisions performed: {result['num_revisions']}")
 3. Classifies the pair into {ENTAILMENT, CONTRADICTION, NEUTRAL} using the DeBERTa-v3-Large cross-encoder.
 4. Non-entailed sentences (CONTRADICTION or NEUTRAL) are flagged as `F_NLI`.
 
-**Critical architectural constraint:** The cross-encoder truncates the premise (source text) to **512 subword tokens**. This creates a positional bias that is the proximate cause of verifier exploitation: content grounded in source material beyond the 512-token window cannot be verified and is systematically removed during revision. See §5 of the paper for the full mechanistic analysis.
+**Critical architectural constraint:** The cross-encoder truncates the premise (source text) to **512 subword tokens**. This creates a positional bias that is the proximate cause of verifier exploitation: content grounded in source material beyond the 512-token window cannot be verified and is systematically removed during revision.
 
 **Method:** `verify_draft(source_text, draft_summary) → (passed: List[str], flagged: List[str])`
 
@@ -287,7 +285,7 @@ print(f"Revisions performed: {result['num_revisions']}")
 
 ### Experiment Runners (`ablations/`)
 
-The `ablations/` directory contains the infrastructure for executing all experimental configurations reported in the paper.
+The `ablations/` directory contains the infrastructure for executing all experimental configurations.
 
 #### `ablations/ablation_base_runner.py` — Shared Experiment Infrastructure
 
@@ -330,7 +328,7 @@ python ablations/Component_Ablation/run_all_sequential.py
 
 #### `ablations/Revision_Depth/revision2.py` — Revision Depth Runner
 
-**Role:** Executes the full pipeline with T<sub>max</sub>=2 to produce the data for the verifier exploitation analysis (§5 of the paper).
+**Role:** Executes the full pipeline with T<sub>max</sub>=2 to produce the data for the verifier exploitation analysis.
 
 **Usage:**
 ```bash
@@ -389,7 +387,7 @@ python scripts/Revision_Depth/evaluate_bartscore_full_revisions_2.py
 
 #### `run_significance_testing.py` — Wilcoxon Signed-Rank Tests
 
-**Role:** Performs paired, non-parametric significance tests on the precomputed per-instance metric scores. Produces the statistical evidence reported in Table 5 of the paper.
+**Role:** Performs paired, non-parametric significance tests on the precomputed per-instance metric scores.
 
 **Tests performed:**
 
@@ -459,7 +457,7 @@ Each subdirectory contains checkpoint files (`checkpoint_<N>_samples.json`) and 
 
 ### Precomputed Results (`Results/`)
 
-All CSV files in the `Results/` directory contain the precomputed evaluation metric scores reported in the paper. These are provided so that results can be verified and statistical tests can be re-run without re-executing the full evaluation pipeline (which requires the external metric repositories and GPU resources).
+All CSV files in the `Results/` directory contain the precomputed evaluation metric scores. These are provided so that results can be verified and statistical tests can be re-run without re-executing the full evaluation pipeline (which requires the external metric repositories and GPU resources).
 
 Each metric subdirectory contains:
 - **Per-instance detailed CSVs** (`<metric>_detailed_<config>.csv`): One row per evaluation instance with columns `id` and the metric-specific score column.
@@ -593,7 +591,7 @@ python run_significance_testing.py
 
 ## Results Summary
 
-All results below are reported over n = 498 Multi-News test instances (2 instances excluded due to GPU memory constraints). Full analysis, statistical tests, and discussion are presented in the paper.
+All results below are reported over n = 498 Multi-News test instances (2 instances excluded due to GPU memory constraints).
 
 ### Component Ablation — Primary Faithfulness Metrics
 
